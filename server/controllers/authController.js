@@ -42,7 +42,7 @@ export const register = async (req, res) => {
         })
 
         await sendEmail({
-            to: email,
+            to: user.email,
             subject: 'Welcome to Cur10usX!',
             text: `Hello ${user.name},\n\nYour account was created successfully.\n\nBest regards,\nCur10usX`
         })
@@ -79,7 +79,7 @@ export const login = async (req, res) => {
         })
 
         await sendEmail({
-            to: email,
+            to: user.email,
             subject: 'Login Notification',
             text: `Hello ${user.name},\n\nYou logged in to your account.\n\nIf this wasn't you, please secure your account immediately.\n\nBest regards,\nCur10usX`
         })
@@ -102,5 +102,65 @@ export const logout = async (req, res) => {
     }
     catch (error) {
         return res.json({ success: false, message: error.message })
+    }
+}
+
+// Send Verification OTP to the user email
+export const sendVerificationOtp = async (req, res) => {
+    try{
+        const {userId} = req.body;
+        const user = await userModel.findById(userId);
+        if (user.isAccountVerified) {
+            return res.json({ success: false, message: 'Account already verified' })
+        }
+        const otp = String(Math.floor(100000 + Math.random() * 900000));
+        user.verifyOtp = otp;
+        user.verifyOtpExpireAt = Date.now() + 24 * 60 * 60 * 1000; // OTP valid for 24 hours
+        await user.save();
+
+        await sendEmail({
+            to: user.email,
+            subject: 'Verification OTP',
+            text: `Hello ${user.name},\n\nYour verification OTP is: ${otp}\n\nThis OTP is valid for 24 hours.\n\nBest regards,\nCur10usX`
+        })
+
+        res.json({ success: true, message: 'Verification OTP sent to email' })
+    } catch (error) {
+        return res.json({ success: false, message: error.message })
+    }
+}
+
+export const verifyAccount = async (req, res) => {
+        const { userId, otp } = req.body;
+        if (!userId || !otp) {
+            return res.json({ success: false, message: 'User ID and OTP are required' })
+        }try {
+            const user = await userModel.findById(userId);
+            if (!user) {
+                return res.json({ success: false, message: 'User not found' })
+            }
+            if (user.verifyOtp === '' || user.verifyOtp !== String(otp)) {
+                return res.json({ success: false, message: 'Invalid OTP' })
+            }
+            if (user.verifyOtpExpireAt < Date.now()) {
+                return res.json({ success: false, message: 'OTP has expired' })
+            }
+            user.isAccountVerified = true;
+            user.verifyOtp = '';
+            user.verifyOtpExpireAt = 0;
+            await user.save();
+            return res.json({ success: true, message: 'Account verified successfully' })
+        }
+        catch (error) {
+            return res.json({ success: false, message: error.message })
+        }   
+    }
+
+export const isAuthenticated = async (req, res) => {
+    try {
+        return res.json({ success: true, message: 'User is authenticated' })
+    }
+    catch (error) {
+        return res.json({ success: false, message: error.message }) 
     }
 }
